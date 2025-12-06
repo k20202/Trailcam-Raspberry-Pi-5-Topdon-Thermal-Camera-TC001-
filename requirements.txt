@@ -1,0 +1,9 @@
+# Minimal required for the web interface
+flask
+
+# If main.py uses OpenCV and NumPy (very likely for trailcam logic),
+# uncomment these lines:
+# opencv-python
+# numpy
+
+# If you use picamera or other libs, add them here too.
