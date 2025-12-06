@@ -62,6 +62,16 @@ By default, the recorder and webapp expect:
 
 ---
 
+## Web Interface Preview
+
+### Live View
+![Live View](images/webui_live.png)
+
+### File Browser
+![File Browser](images/webui_files.png)
+
+---
+
 ## Installation
 
 Clone the repository to your Pi:
