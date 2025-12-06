@@ -1,0 +1,15 @@
+[Unit]
+Description=Assign static AP IP to wlan0 for Trailcam
+After=network-pre.target
+Before=hostapd.service dnsmasq.service
+Wants=hostapd.service dnsmasq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip addr flush dev wlan0
+ExecStart=/usr/sbin/ip addr add 192.168.4.1/24 dev wlan0
+ExecStart=/usr/sbin/ip link set wlan0 up
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
