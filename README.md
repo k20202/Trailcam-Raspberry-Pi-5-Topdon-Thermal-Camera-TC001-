@@ -57,8 +57,9 @@ By default, the recorder and webapp expect:
 └── status.json      # small JSON with {"recording": bool, "events": int}
 ```
 
-Replace <user> with your actual Linux username (e.g. kasper or pi).
-You can change paths in main.py and webapp.py if you prefer a different layout.
+ - Replace <user> with your actual Linux username (e.g. kasper or pi).
+ - You can change paths in main.py and webapp.py if you prefer a different layout.
+
 ---
 
 ## Installation
@@ -187,7 +188,7 @@ When connected to the Pi’s AP (e.g. **Topdon TrailCam**):
 
 - http://192.168.4.1:8000/
 
-With mDNS + Bonjour (Windows/macOS/iOS support):
+With mDNS (Windows/macOS/iOS support):
 
 - http://trailcam.local:8000/
 
