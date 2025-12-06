@@ -60,6 +60,7 @@ By default, the recorder and webapp expect:
 Replace <user> with your actual Linux username (e.g. kasper or pi).
 You can change paths in main.py and webapp.py if you prefer a different layout.
 ---
+
 ## Installation
 
 Clone the repository to your Pi:
