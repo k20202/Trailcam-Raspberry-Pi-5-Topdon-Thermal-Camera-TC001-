@@ -1,0 +1,14 @@
+[Unit]
+Description=Trailcam recorder (main.py)
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/trailcam
+ExecStart=/usr/bin/python3 /home/YOUR_USERNAME/trailcam/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
