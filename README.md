@@ -72,6 +72,16 @@ By default, the recorder and webapp expect:
 
 ---
 
+## 3D Printed Parts
+
+The 3D parts used for the camera mount are available here:
+
+- [STL file](3d_models/Trailcam_3D.stl)
+- [STEP file](3d_models/Trailcam_3D.step)
+- [Fusion 360 file (F3D)](3d_models/Trailcam_3D.f3d)
+
+---
+
 ## Installation
 
 Clone the repository to your Pi:
