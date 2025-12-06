@@ -98,7 +98,7 @@ The app listens on **0.0.0.0:8000**, so you can visit:
 
 - http://trailcam.local:8000/ (if mDNS is set up and your client supports `.local`)
 - http://192.168.4.1:8000/ when connected to the Pi’s AP
-- http://<ethernet-ip>:8000/ if using Ethernet
+* `http://<ethernet-ip>:8000/` if using Ethernet
 
 ### Recorder
 
