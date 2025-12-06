@@ -1,0 +1,10 @@
+# Example dnsmasq config for Trailcam AP mode
+
+interface=wlan0
+bind-interfaces
+dhcp-range=192.168.4.10,192.168.4.50,255.255.255.0,24h
+
+# Upstream DNS
+server=1.1.1.1
+domain-needed
+bogus-priv
