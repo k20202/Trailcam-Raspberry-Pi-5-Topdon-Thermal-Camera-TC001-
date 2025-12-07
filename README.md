@@ -1,215 +1,193 @@
-# Trailcam-Raspberry-Pi-5-Topdon-Thermal-Camera-TC001-
+# Trailcam -- Raspberry Pi 5 + Topdon TC001 Thermal Camera
 
-Trailcam is a Raspberry Pi–based trail camera / thermal recorder project.
+This project is a **Raspberry Pi 5--based thermal trail camera system**
+built around the **Topdon TC001** USB thermal camera. It provides:
 
-It consists of:
+-   Real‑time MJPEG **live streaming**
+-   **Automatic thermal motion detection**
+-   **Tracked and raw video recording**
+-   **Snapshot photos**
+-   **Full web‑based control panel**
+-   **ARMED / DISARMED recording toggle**
+-   **Background auto‑reset when idle**
+-   **Phone‑based time synchronisation**
+-   **ZIP export + file browser**
+-   **Optional Wi‑Fi access‑point mode**
+-   **DS3231 RTC hardware support**
 
-- `main.py` – the recorder / motion logic that:
-  - grabs frames from the camera,
-  - runs detection / background subtraction,
-  - saves photos/videos into a media directory,
-  - writes `status.json` for the web UI.
-- `webapp.py` – a lightweight Flask web interface that:
-  - shows a live MJPEG view using `live.jpg`,
-  - lets you browse/download/delete photos and videos,
-  - offers a "Download all media as ZIP" button,
-  - exposes a "Reset background" button for the recorder.
+------------------------------------------------------------------------
 
-Networking is set up so the Pi can run as a **Wi-Fi access point** (AP mode), with:
-- SSID like `Topdon TrailCam` (configured via `hostapd.conf`)
-- Static AP IP `192.168.4.1`
-- Web interface at `http://trailcam.local:8000/` or `http://192.168.4.1:8000/` when connected to the AP
+## Core Programs
 
-Ethernet works as a backup path: if both your PC and Pi are on the same wired LAN, you can still reach:
-- `ssh kasper@trailcam.local`
-- `http://trailcam.local:8000/`
+-   **`main.py`**
+    -   Handles:
+        -   Thermal + visual decoding
+        -   Hot‑object detection
+        -   Motion tracking
+        -   Video + tracked‑video recording
+        -   Periodic photo capture
+        -   Background subtraction
+        -   Status file generation
+        -   **ARMED / DISARMED logic**
+        -   **Auto background reset every 60s while idle**
+-   **`webapp.py`**
+    -   Lightweight Flask server providing:
+        -   Live MJPEG stream from `live.jpg`
+        -   Media browser + download
+        -   Bulk ZIP export
+        -   Per‑file delete + delete all
+        -   Manual background reset
+        -   **ARMED / DISARMED toggle button**
+        -   **One‑tap phone time synchronisation**
+        -   Recorder status display
 
-> **NOTE:** This repo contains configuration *templates* for hostapd/dnsmasq and systemd services. You may need to adjust usernames, paths, and SSIDs for your own Pi.
+------------------------------------------------------------------------
 
----
+## Major New Features (2025 Update)
 
-## Features
+✅ **ARMED / DISARMED Recording Toggle** - Recording only occurs while
+ARMED. - DISARMED state disables **all video + photo saving**. - Live
+stream continues even when disarmed. - Toggle controlled from the web
+UI. - Green button = ARMED\
+- Red button = DISARMED
 
-- MJPEG live view from `live.jpg`
-- File browser for:
-  - raw videos (`/home/<user>/media/videos`)
-  - processed / tracked videos (`/home/<user>/media/videos_tracked`)
-  - photos (`/home/<user>/media/photos`)
-- Per–file download + delete
-- "Delete all" buttons (with warning) for each category and all media
-- "Download ALL media as ZIP" button
-- Background reset hook via a simple flag file
-- Optional: Wi-Fi AP with static IP & DHCP via hostapd + dnsmasq
-- systemd units to run the recorder and web server at boot
+✅ **Automatic Background Reset While Idle** - If **no objects are
+detected for 60 seconds**, the thermal background is automatically
+refreshed. - Prevents: - Cloud movement false positives - Gradual
+thermal drift accumulation - Reset only happens when **nothing is being
+tracked**.
 
----
+✅ **Phone‑Based Time Synchronisation** - When connected to the Pi -
+Press **"Sync Time From This Device"** - Pi system clock is instantly
+updated from your phone - DS3231 RTC can then be written automatically
 
-## Directory structure (runtime on the Pi)
+✅ **DS3231 RTC Hardware Support** - Allows correct time even without
+internet - Recommended for permanent deployment
 
-By default, the recorder and webapp expect:
+------------------------------------------------------------------------
 
-```text
-/home/<user>/media/
-├── photos/
-├── videos/
-├── videos_tracked/
-├── live.jpg         # latest frame for live MJPEG view
-└── status.json      # small JSON with {"recording": bool, "events": int}
-```
+## Runtime Directory Structure
 
- - Replace <user> with your actual Linux username (e.g. kasper or pi).
- - You can change paths in main.py and webapp.py if you prefer a different layout.
+    /home/kasper/media/
+    ├── photos/
+    ├── videos/
+    ├── videos_tracked/
+    ├── live.jpg
+    └── status.json
 
----
+-   `live.jpg` = latest MJPEG frame
+-   `status.json` = `{ recording: bool, events: int }`
 
-## Web Interface Preview
+------------------------------------------------------------------------
 
-### Live View
-![Live View](images/webui_live.png)
+## Web Interface
 
-### File Browser
-![File Browser](images/webui_files.png)
+The web interface is hosted at:
 
----
+    http://trailcam.local:8000/
+    http://192.168.4.1:8000/
 
-## 3D Printed Parts
+Features: - Live MJPEG view - Browse and delete all media - Download
+individual files - Download everything as ZIP - Manual background
+reset - **ARMED / DISARMED toggle** - **Phone time synchronisation
+button**
 
-The 3D parts used for the camera mount are available here:
-
-- [STL file](3d_models/Trailcam_3D.stl)
-- [STEP file](3d_models/Trailcam_3D.step)
-- [Fusion 360 file (F3D)](3d_models/Trailcam_3D.f3d)
-
----
+------------------------------------------------------------------------
 
 ## Installation
 
-Clone the repository to your Pi:
+Clone the repository:
 
-```bash
-cd ~
-git clone https://github.com/<your-username>/trailcam.git
-cd trailcam
+``` bash
+git clone https://github.com/k20202/Trailcam-Raspberry-Pi-5-Topdon-Thermal-Camera-TC001.git
+cd Trailcam-Raspberry-Pi-5-Topdon-Thermal-Camera-TC001
 ```
 
-Create and activate a virtual environment (optional but recommended):
+Create a virtual environment (optional):
 
-```bash
+``` bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Make sure your camera and other dependencies are correctly set up  
-(Topdon TS004 / thermal camera, OpenCV, etc.) as required by `main.py`.
+------------------------------------------------------------------------
 
----
+## Running Manually
 
-## Running manually
+Start the recorder:
 
-### Web UI
-
-```bash
-cd ~/trailcam
-python3 webapp.py
-```
-
-The app listens on **0.0.0.0:8000**, so you can visit:
-
-- http://trailcam.local:8000/ (if mDNS is set up and your client supports `.local`)
-- http://192.168.4.1:8000/ when connected to the Pi’s AP
-* `http://<ethernet-ip>:8000/` if using Ethernet
-
-
-### Recorder
-
-In another terminal:
-
-```bash
-cd ~/trailcam
+``` bash
 python3 main.py
 ```
 
----
+Start the web interface:
 
-## Running with systemd (recommended)
+``` bash
+python3 webapp.py
+```
 
-This repo includes example systemd service files in `systemd/`:
+------------------------------------------------------------------------
 
-- **wlan0-ap-ip.service** – sets `192.168.4.1/24` on wlan0 at boot  
-- **trailcam-recorder.service** – runs `main.py` at boot  
-- **trailcam-web.service** – runs `webapp.py` at boot  
+## Running at Boot (systemd)
 
-To install them:
+Install services:
 
-```bash
+``` bash
 sudo cp systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-
-sudo systemctl enable wlan0-ap-ip.service
 sudo systemctl enable trailcam-recorder.service
 sudo systemctl enable trailcam-web.service
-
-sudo systemctl start wlan0-ap-ip.service
 sudo systemctl start trailcam-recorder.service
 sudo systemctl start trailcam-web.service
 ```
 
-**Make sure you edit the `ExecStart=` paths inside each service**  
-to match where you cloned the repo and the user you run as.
+------------------------------------------------------------------------
 
----
+## Wi‑Fi Access Point Mode
 
-## Wi-Fi AP configuration
+AP mode allows direct phone connection to the Pi:
 
-Example configuration templates are in `config/`:
+-   SSID example: `Topdon TrailCam`
+-   AP IP: `192.168.4.1`
+-   Web UI:
+    -   `http://192.168.4.1:8000/`
+    -   `http://trailcam.local:8000/`
 
-- `hostapd.conf.example`  
-- `dnsmasq-trailcam.conf.example`
+Requires: - `hostapd` - `dnsmasq` - `avahi-daemon`
 
----
+------------------------------------------------------------------------
 
-### On the Pi
+## 3D Printed Parts
 
-#### Install required packages:
+Available in `/3d_models/`:
 
-```bash
-sudo apt update
-sudo apt install hostapd dnsmasq avahi-daemon -y
-```
+-   STL
+-   STEP
+-   Fusion 360 F3D
 
-#### Copy and edit configs:
+------------------------------------------------------------------------
 
-```bash
-sudo cp config/hostapd.conf.example /etc/hostapd/hostapd.conf
-sudo cp config/dnsmasq-trailcam.conf.example /etc/dnsmasq.d/trailcam.conf
+## Hardware Used
 
-sudo nano /etc/hostapd/hostapd.conf
-sudo nano /etc/dnsmasq.d/trailcam.conf
-```
+-   Raspberry Pi 5
+-   Topdon TC001 USB Thermal Camera
+-   DS3231 RTC Module
+-   3D printed enclosure and camera mount
 
-#### Enable hostapd and dnsmasq:
+------------------------------------------------------------------------
 
-```bash
-sudo systemctl enable hostapd dnsmasq
-sudo systemctl restart hostapd dnsmasq
-```
+## Safety & Legal Notes
 
-#### Enable mDNS (for `trailcam.local`):
+-   Always respect local wildlife and privacy laws
+-   Do not surveil private property without consent
+-   Thermal cameras can detect humans through foliage
+-   Use responsibly
 
-```bash
-sudo systemctl enable --now avahi-daemon
-```
+------------------------------------------------------------------------
 
----
+## Author
 
-## Accessing the Web Interface
-
-When connected to the Pi’s AP (e.g. **Topdon TrailCam**):
-
-- http://192.168.4.1:8000/
-
-With mDNS (Windows/macOS/iOS support):
-
-- http://trailcam.local:8000/
-
+Kasper Starzec\
+Biomedical Engineering & Embedded Vision Systems\
+Topdon Master Contributor
