@@ -106,65 +106,123 @@ button**
 
 ## Installation
 
-Clone the repository:
+Clone the repository to your Pi:
 
-``` bash
-git clone https://github.com/k20202/Trailcam-Raspberry-Pi-5-Topdon-Thermal-Camera-TC001.git
-cd Trailcam-Raspberry-Pi-5-Topdon-Thermal-Camera-TC001
+```bash
+cd ~
+git clone https://github.com/<your-username>/trailcam.git
+cd trailcam
 ```
 
-Create a virtual environment (optional):
+Create and activate a virtual environment (optional but recommended):
 
-``` bash
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Make sure your camera and other dependencies are correctly set up  
+(Topdon TS004 / thermal camera, OpenCV, etc.) as required by `main.py`.
+
+
 ------------------------------------------------------------------------
 
-## Running Manually
+## Running manually
 
-Start the recorder:
+### Web UI
 
-``` bash
-python3 main.py
-```
-
-Start the web interface:
-
-``` bash
+```bash
+cd ~/trailcam
 python3 webapp.py
 ```
 
+The app listens on **0.0.0.0:8000**, so you can visit:
+
+- http://trailcam.local:8000/ (if mDNS is set up and your client supports `.local`)
+- http://192.168.4.1:8000/ when connected to the Pi’s AP
+* `http://<ethernet-ip>:8000/` if using Ethernet
+
+
+### Recorder
+
+In another terminal:
+
+```bash
+cd ~/trailcam
+python3 main.py
+```
+
 ------------------------------------------------------------------------
 
-## Running at Boot (systemd)
+## Running with systemd (recommended)
 
-Install services:
+This repo includes example systemd service files in `systemd/`:
 
-``` bash
+- **wlan0-ap-ip.service** – sets `192.168.4.1/24` on wlan0 at boot  
+- **trailcam-recorder.service** – runs `main.py` at boot  
+- **trailcam-web.service** – runs `webapp.py` at boot  
+
+To install them:
+
+```bash
 sudo cp systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
+
+sudo systemctl enable wlan0-ap-ip.service
 sudo systemctl enable trailcam-recorder.service
 sudo systemctl enable trailcam-web.service
+
+sudo systemctl start wlan0-ap-ip.service
 sudo systemctl start trailcam-recorder.service
 sudo systemctl start trailcam-web.service
 ```
 
+**Make sure you edit the `ExecStart=` paths inside each service**  
+to match where you cloned the repo and the user you run as.
+
 ------------------------------------------------------------------------
 
-## Wi‑Fi Access Point Mode
+## Wi-Fi AP configuration
 
-AP mode allows direct phone connection to the Pi:
+Example configuration templates are in `config/`:
 
--   SSID example: `Topdon TrailCam`
--   AP IP: `192.168.4.1`
--   Web UI:
-    -   `http://192.168.4.1:8000/`
-    -   `http://trailcam.local:8000/`
+- `hostapd.conf.example`  
+- `dnsmasq-trailcam.conf.example`
 
-Requires: - `hostapd` - `dnsmasq` - `avahi-daemon`
+---
+
+### On the Pi
+
+#### Install required packages:
+
+```bash
+sudo apt update
+sudo apt install hostapd dnsmasq avahi-daemon -y
+```
+
+#### Copy and edit configs:
+
+```bash
+sudo cp config/hostapd.conf.example /etc/hostapd/hostapd.conf
+sudo cp config/dnsmasq-trailcam.conf.example /etc/dnsmasq.d/trailcam.conf
+
+sudo nano /etc/hostapd/hostapd.conf
+sudo nano /etc/dnsmasq.d/trailcam.conf
+```
+
+#### Enable hostapd and dnsmasq:
+
+```bash
+sudo systemctl enable hostapd dnsmasq
+sudo systemctl restart hostapd dnsmasq
+```
+
+#### Enable mDNS (for `trailcam.local`):
+
+```bash
+sudo systemctl enable --now avahi-daemon
+```
 
 ------------------------------------------------------------------------
 
