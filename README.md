@@ -66,6 +66,16 @@ internet - Recommended for permanent deployment
 
 ------------------------------------------------------------------------
 
+## Web Interface Preview
+
+### Live View
+![Live View](images/webui_live.png)
+
+### File Browser
+![File Browser](images/webui_files.png)
+
+------------------------------------------------------------------------
+
 ## Runtime Directory Structure
 
     /home/kasper/media/
@@ -155,16 +165,6 @@ AP mode allows direct phone connection to the Pi:
     -   `http://trailcam.local:8000/`
 
 Requires: - `hostapd` - `dnsmasq` - `avahi-daemon`
-
-------------------------------------------------------------------------
-
-## Web Interface Preview
-
-### Live View
-![Live View](images/webui_live.png)
-
-### File Browser
-![File Browser](images/webui_files.png)
 
 ------------------------------------------------------------------------
 
