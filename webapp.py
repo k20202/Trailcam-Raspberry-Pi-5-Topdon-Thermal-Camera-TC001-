@@ -8,7 +8,7 @@ import tempfile
 from flask import (
     Flask, Response, send_from_directory,
     render_template_string, abort, redirect, url_for,
-    send_file, after_this_request, request
+    send_file, after_this_request, request, jsonify
 )
 
 # Paths must match main.py
@@ -28,7 +28,15 @@ STATUS_PATH = os.path.join(MEDIA_ROOT, "status.json")
 NET_STATE_PATH = "/run/trailcam_net_state.json"
 DESIRED_MODE_PATH = "/run/trailcam_desired_mode.json"
 
+# Armed/disarmed state (shared with main.py)
+ARMED_STATE_PATH = os.path.join(MEDIA_ROOT, "armed_state.json")
+
+
 app = Flask(__name__)
+
+# --------------------------------------------------------------------
+# HTML TEMPLATES
+# --------------------------------------------------------------------
 
 HTML_INDEX = """
 <!doctype html>
@@ -45,11 +53,54 @@ HTML_INDEX = """
     .bot { padding:10px; background:#111; }
     a, a:visited { color:#6cf; text-decoration:none; }
     a:hover { text-decoration:underline; }
-    .btn-row { margin-bottom:10px; }
-    .btn { display:inline-block; padding:8px 12px; margin-right:8px; background:#222; border-radius:6px; border:0; color:#6cf; cursor:pointer; }
-    form { display:inline; }
+    .btn-row { margin-bottom:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .btn {
+      display:inline-block; padding:8px 12px;
+      background:#222; border-radius:6px; border:0;
+      color:#6cf; cursor:pointer;
+    }
+    form { display:inline; margin:0; }
     .status { margin-top:8px; font-size:0.85rem; color:#aaa; }
+    .btn-armed {
+      background:#063;
+      color:#cfc;
+    }
+    .btn-disarmed {
+      background:#600;
+      color:#fcc;
+    }
   </style>
+  <script>
+    async function syncTime() {
+      try {
+        const now = new Date();
+        const payload = {
+          epoch_ms: now.getTime(),
+          iso: now.toISOString(),
+          tz_offset_min: now.getTimezoneOffset()
+        };
+
+        const res = await fetch("{{ url_for('sync_time') }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (data.status === "ok") {
+          alert("Pi time synced from this device.");
+        } else {
+          alert("Time sync failed: " + (data.message || "unknown error"));
+        }
+      } catch (err) {
+        alert("Time sync error: " + err);
+      }
+    }
+
+    // If you want automatic sync when page loads, uncomment this:
+    // window.addEventListener("load", syncTime);
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -62,28 +113,22 @@ HTML_INDEX = """
         <form method="post" action="{{ url_for('reset_background') }}">
           <button class="btn" type="submit">Reset background</button>
         </form>
-        <form method="post" action="{{ url_for('set_mode_wifi') }}">
-          <button class="btn" type="submit">Use Wi-Fi mode</button>
+        <button class="btn" type="button" onclick="syncTime()">Sync time from this device</button>
+        <form method="post" action="{{ url_for('toggle_armed') }}">
+          <button
+            class="btn {% if armed %}btn-armed{% else %}btn-disarmed{% endif %}"
+            type="submit">
+            {% if armed %}ARMED{% else %}DISARMED{% endif %}
+          </button>
         </form>
-        <form method="post" action="{{ url_for('set_mode_ap') }}">
-          <button class="btn" type="submit">Use AP mode</button>
-        </form>
-      </div>
-      <div>
-        <small>Live view comes from the latest frame saved by the recorder.</small>
       </div>
       <div class="status">
         Events this run: {{ events }} &nbsp;|&nbsp;
-        Recording: {{ "ON" if recording else "OFF" }}<br>
-        Network:
-        {% if net_mode == "wifi" %}
-          Wi-Fi client
-          {% if net_signal is not none %}(signal {{ net_signal }} dBm){% endif %}
-        {% elif net_mode == "ap" %}
-          Access Point (hotspot)
-        {% else %}
-          Unknown
-        {% endif %}
+        Recording: {{ "ON" if recording else "OFF" }} &nbsp;|&nbsp;
+        System: {% if armed %}ARMED{% else %}DISARMED{% endif %}
+      </div>
+      <div class="status">
+        <small>Live view comes from the latest frame saved by the recorder.</small>
       </div>
     </div>
   </div>
@@ -107,36 +152,46 @@ HTML_FILES = """
     li { margin:4px 0; }
     .delbtn { margin-left:8px; padding:2px 6px; border-radius:4px; border:0; background:#700; color:#fff; cursor:pointer; font-size:0.8rem; }
     .dlbtn { margin-left:8px; padding:2px 6px; border-radius:4px; border:0; background:#246; color:#fff; cursor:pointer; font-size:0.8rem; text-decoration:none; }
-    form { display:inline; }
+    form { display:inline; margin:0; }
     .footer { margin-top:20px; font-size:0.85rem; color:#aaa; }
     .warn { font-size:0.85rem; color:#faa; margin-top:4px; }
     .big-del { margin:10px 0; padding:6px 10px; border-radius:6px; border:0; background:#900; color:#fff; cursor:pointer; }
     .status { font-size:0.85rem; color:#aaa; margin-bottom:10px; }
+    .btn {
+      display:inline-block; padding:6px 10px;
+      background:#222; border-radius:6px; border:0;
+      color:#6cf; cursor:pointer;
+    }
+    .btn-armed {
+      background:#063;
+      color:#cfc;
+    }
+    .btn-disarmed {
+      background:#600;
+      color:#fcc;
+    }
   </style>
 </head>
 <body>
   <h1>Trailcam Files</h1>
 
   <p class="status">
-    Network:
-    {% if net_mode == "wifi" %}
-      Wi-Fi client
-      {% if net_signal is not none %}(signal {{ net_signal }} dBm){% endif %}
-    {% elif net_mode == "ap" %}
-      Access Point (hotspot)
-    {% else %}
-      Unknown
-    {% endif %}
+    System: {% if armed %}ARMED{% else %}DISARMED{% endif %}
+    &nbsp;|&nbsp;
+    Events this run: {{ events }}
+    &nbsp;|&nbsp;
+    Recording: {{ "ON" if recording else "OFF" }}
   </p>
 
-  <div class="status">
-    <form method="post" action="{{ url_for('set_mode_wifi') }}">
-      <button class="btn" type="submit">Use Wi-Fi mode</button>
+  <p class="status">
+    <form method="post" action="{{ url_for('toggle_armed') }}">
+      <button
+        class="btn {% if armed %}btn-armed{% else %}btn-disarmed{% endif %}"
+        type="submit">
+        {% if armed %}ARMED{% else %}DISARMED{% endif %}
+      </button>
     </form>
-    <form method="post" action="{{ url_for('set_mode_ap') }}">
-      <button class="btn" type="submit">Use AP mode</button>
-    </form>
-  </div>
+  </p>
 
   <form method="post" action="{{ url_for('delete_all', target='all') }}">
     <button class="big-del" type="submit">
@@ -220,6 +275,10 @@ HTML_FILES = """
 </html>
 """
 
+# --------------------------------------------------------------------
+# HELPERS
+# --------------------------------------------------------------------
+
 def get_status():
     """Read status.json written by main.py."""
     try:
@@ -233,7 +292,7 @@ def get_status():
     return recording, events
 
 def get_net_state():
-    """Read mode info written by trailcam_netmgr.py."""
+    """Read mode info written by trailcam_netmgr.py (kept for compatibility)."""
     try:
         with open(NET_STATE_PATH, "r") as f:
             data = json.load(f)
@@ -253,6 +312,36 @@ def set_desired_mode(mode):
     except Exception:
         pass
 
+def read_armed_state(default=True):
+    """
+    Read armed/disarmed state from ARMED_STATE_PATH.
+    If file does not exist or is invalid, returns default and writes it once.
+    """
+    try:
+        with open(ARMED_STATE_PATH, "r") as f:
+            data = json.load(f)
+        return bool(data.get("armed", default))
+    except Exception:
+        write_armed_state(default)
+        return default
+
+def write_armed_state(armed: bool):
+    """Persist armed/disarmed state to ARMED_STATE_PATH."""
+    data = {"armed": bool(armed), "ts": time.time()}
+    try:
+        os.makedirs(os.path.dirname(ARMED_STATE_PATH), exist_ok=True)
+    except Exception:
+        pass
+    try:
+        with open(ARMED_STATE_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+# --------------------------------------------------------------------
+# MJPEG STREAM
+# --------------------------------------------------------------------
+
 def mjpeg_generator():
     """Stream the latest JPEG as MJPEG."""
     while True:
@@ -268,16 +357,23 @@ def mjpeg_generator():
                 pass
         time.sleep(0.1)  # ~10 fps
 
+# --------------------------------------------------------------------
+# ROUTES
+# --------------------------------------------------------------------
+
 @app.route("/")
 def index():
     recording, events = get_status()
+    # net_mode, net_signal still read if you ever want them later.
     net_mode, net_signal = get_net_state()
+    armed = read_armed_state(default=True)
     return render_template_string(
         HTML_INDEX,
         recording=recording,
         events=events,
         net_mode=net_mode,
         net_signal=net_signal,
+        armed=armed,
     )
 
 @app.route("/stream")
@@ -307,6 +403,7 @@ def files():
 
     recording, events = get_status()
     net_mode, net_signal = get_net_state()
+    armed = read_armed_state(default=True)
 
     return render_template_string(
         HTML_FILES,
@@ -317,6 +414,7 @@ def files():
         events=events,
         net_mode=net_mode,
         net_signal=net_signal,
+        armed=armed,
     )
 
 @app.route("/view/<folder>/<path:fname>")
@@ -456,6 +554,7 @@ def reset_background():
 
 @app.route("/set_mode_wifi", methods=["POST"])
 def set_mode_wifi():
+    # Kept for compatibility, even if you don't expose a button anymore
     set_desired_mode("wifi")
     ref = request.referrer
     if ref:
@@ -464,7 +563,52 @@ def set_mode_wifi():
 
 @app.route("/set_mode_ap", methods=["POST"])
 def set_mode_ap():
+    # Kept for compatibility, even if you don't expose a button anymore
     set_desired_mode("ap")
+    ref = request.referrer
+    if ref:
+        return redirect(ref)
+    return redirect(url_for("index"))
+
+@app.route("/sync_time", methods=["POST"])
+def sync_time():
+    """
+    Sync Pi system time from the connected device.
+    Expects JSON like:
+      { "epoch_ms": 1733570000000, "iso": "...", "tz_offset_min": -60 }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        epoch_ms = data.get("epoch_ms")
+        iso_str = data.get("iso")
+
+        if epoch_ms is not None:
+            # Browser gives ms since Unix epoch
+            epoch_sec = int(epoch_ms // 1000)
+            # Set using UTC epoch – system will apply local timezone
+            cmd = f"sudo date -u -s @{epoch_sec}"
+        elif iso_str:
+            # Fallback: ISO 8601 string like "2025-12-02T17:25:23.000Z"
+            cmd = f"sudo date -u -s '{iso_str}'"
+        else:
+            return jsonify({"status": "error", "message": "No time provided"}), 400
+
+        rc = os.system(cmd)
+        if rc != 0:
+            return jsonify({"status": "error", "message": f"date command failed ({rc})"}), 500
+
+        # OPTIONAL: if DS3231 is set up as the hardware clock, also write system time to RTC:
+        # os.system("sudo hwclock -w")
+
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/toggle_armed", methods=["POST"])
+def toggle_armed():
+    """Toggle armed/disarmed state."""
+    current = read_armed_state(default=True)
+    write_armed_state(not current)
     ref = request.referrer
     if ref:
         return redirect(ref)
