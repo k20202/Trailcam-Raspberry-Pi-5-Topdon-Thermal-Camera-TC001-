@@ -158,13 +158,23 @@ Requires: - `hostapd` - `dnsmasq` - `avahi-daemon`
 
 ------------------------------------------------------------------------
 
+## Web Interface Preview
+
+### Live View
+![Live View](images/webui_live.png)
+
+### File Browser
+![File Browser](images/webui_files.png)
+
+------------------------------------------------------------------------
+
 ## 3D Printed Parts
 
-Available in `/3d_models/`:
+The 3D parts used for the camera mount are available here:
 
--   STL
--   STEP
--   Fusion 360 F3D
+- [STL file](3d_models/Trailcam_3D.stl)
+- [STEP file](3d_models/Trailcam_3D.step)
+- [Fusion 360 file (F3D)](3d_models/Trailcam_3D.f3d)
 
 ------------------------------------------------------------------------
 
