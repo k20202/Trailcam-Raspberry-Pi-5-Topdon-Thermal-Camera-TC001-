@@ -6,6 +6,7 @@ import datetime
 import os
 import sys
 from collections import deque
+import json
 
 # Force headless behaviour; Pi screen no longer used
 HAS_DISPLAY = False
@@ -40,6 +41,9 @@ VIDEO_SIZE = (WIDTH * VIDEO_SCALE, HEIGHT * VIDEO_SCALE)
 # Background reset flag (touched by web UI)
 RESET_FLAG_PATH = "/tmp/trailcam_reset_bg"
 
+# Auto background reset when idle (no detections)
+AUTO_BG_RESET_IDLE_SEC = 60  # seconds of no objects before auto-reset
+
 # Optional flicker smoothing for the visual channel
 ENABLE_VISUAL_SMOOTHING = False
 VISUAL_SMOOTH_ALPHA = 0.4  # 0–1, higher = more smoothing (and more lag)
@@ -55,6 +59,9 @@ VIDEO_DIR = os.path.join(BASE_MEDIA_DIR, "videos")
 VIDEO_TRACKED_DIR = os.path.join(BASE_MEDIA_DIR, "videos_tracked")
 LIVE_JPEG_PATH = os.path.join(BASE_MEDIA_DIR, "live.jpg")
 STATUS_PATH = os.path.join(BASE_MEDIA_DIR, "status.json")
+
+# Armed/disarmed state (toggled by web UI)
+ARMED_STATE_PATH = os.path.join(BASE_MEDIA_DIR, "armed_state.json")
 
 for d in (BASE_MEDIA_DIR, PHOTO_DIR, VIDEO_DIR, VIDEO_TRACKED_DIR):
     os.makedirs(d, exist_ok=True)
@@ -78,6 +85,32 @@ def log_info(msg):   print(f"{COL_INFO}[INFO]{COL_RESET} {msg}")
 def log_track(msg):  print(f"{COL_TRACK}[TRACK]{COL_RESET} {msg}")
 def log_record(msg): print(f"{COL_RECORD}[RECORD]{COL_RESET} {msg}")
 def log_warn(msg):   print(f"{COL_WARN}[WARN]{COL_RESET} {msg}")
+
+# ------------------------------------------------------------
+# ARMED STATE HELPERS
+# ------------------------------------------------------------
+
+def read_armed_state(default=True):
+    """
+    Read armed/disarmed state from ARMED_STATE_PATH.
+    If file does not exist or is invalid, returns default and writes it once.
+    """
+    try:
+        with open(ARMED_STATE_PATH, "r") as f:
+            data = json.load(f)
+        return bool(data.get("armed", default))
+    except Exception:
+        # Create file with default state for other components to see.
+        try:
+            os.makedirs(os.path.dirname(ARMED_STATE_PATH), exist_ok=True)
+        except Exception:
+            pass
+        try:
+            with open(ARMED_STATE_PATH, "w") as f:
+                json.dump({"armed": default, "ts": time.time()}, f)
+        except Exception:
+            pass
+        return default
 
 # ------------------------------------------------------------
 # CAMERA OPEN / AUTODETECT (Pi/Linux friendly)
@@ -362,7 +395,6 @@ def format_hhmmss(sec):
 
 def write_status(recording, events):
     """Write lightweight JSON status for the web UI."""
-    import json
     tmp_path = STATUS_PATH + ".tmp"
     data = {
         "recording": bool(recording),
@@ -428,11 +460,19 @@ def main():
 
     # count how many recording events have started since this process started
     events_count = 0
+    # initial armed state (default: armed = True)
+    armed = read_armed_state(default=True)
+    last_armed = armed
+
+    # idle timer for auto background reset
+    idle_start = None
+
     # initial status for web UI
     write_status(False, events_count)
 
     log_info("TC001 Thermal Tracker running...")
     log_info(f"Media root: {BASE_MEDIA_DIR}")
+    log_info(f"Initial state: {'ARMED' if armed else 'DISARMED'}")
 
     while True:
         now = time.time()
@@ -457,6 +497,7 @@ def main():
                 os.remove(RESET_FLAG_PATH)
             except OSError:
                 pass
+            log_info("Background reset via web flag.")
 
         # update smoothing
         if ENABLE_VISUAL_SMOOTHING:
@@ -482,8 +523,44 @@ def main():
         objects_present = len(ids_now) > 0
         in_frame = len(visible)
 
+        # auto background reset when idle (no objects)
+        if objects_present:
+            idle_start = None
+        else:
+            if idle_start is None:
+                idle_start = now
+            elif now - idle_start >= AUTO_BG_RESET_IDLE_SEC:
+                background = thermal.astype(np.float32)
+                idle_start = now
+                log_info("Background auto-reset after idle period with no detections.")
+
+        # read current armed/disarmed state
+        armed = read_armed_state(default=armed)
+        if armed != last_armed:
+            log_info(f"State changed: {'ARMED' if armed else 'DISARMED'}")
+            last_armed = armed
+
+        # If we are recording and user disarms, stop immediately
+        if recording and not armed:
+            recording = False
+            if raw_out:
+                raw_out.release()
+            if trk_out:
+                trk_out.release()
+            raw_out = trk_out = None
+            prebuffer.clear()
+
+            if recording_start_time is not None:
+                rec_len = format_hhmmss(now - recording_start_time)
+            else:
+                rec_len = "00:00:00"
+            recording_start_time = None
+
+            write_status(recording, events_count)
+            log_record(f"FORCED STOP (disarmed) {recording_label} | LENGTH:{rec_len}")
+
         # ---------------- START RECORDING ----------------
-        if objects_present and not recording:
+        if armed and objects_present and not recording:
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             recording_label = ts
 
@@ -505,6 +582,7 @@ def main():
                 raw_path = f"{raw_base}.{raw_ext}"
                 trk_path = f"{trk_base}.{trk_ext}"
 
+                # pre-roll frames
                 for f in prebuffer:
                     pre_scaled = upscale_gray_to_bgr(f)
                     raw_out.write(pre_scaled)
@@ -574,10 +652,13 @@ def main():
 
             trk_out.write(trk_scaled)
 
+            # normal stop when no objects for POST_ROLL_SEC
             if (not objects_present) and (now - last_seen > POST_ROLL_SEC):
                 recording = False
-                raw_out.release()
-                trk_out.release()
+                if raw_out:
+                    raw_out.release()
+                if trk_out:
+                    trk_out.release()
                 raw_out = trk_out = None
                 prebuffer.clear()
 
@@ -636,14 +717,14 @@ def main():
                 print(
                     f"{COL_INFO}[STATUS]{COL_RESET} "
                     f"OBJ:{in_frame} | IDs:{','.join(map(str, ids_now)) if ids_now else 'none'} | "
-                    f"REC:ON@{recording_label}"
+                    f"REC:ON@{recording_label} | STATE:{'ARMED' if armed else 'DISARMED'}"
                 )
             else:
                 rec_text = f"ON@{recording_label}" if recording else "OFF"
                 print(
                     f"{COL_INFO}[STATUS]{COL_RESET} "
                     f"OBJ:{in_frame} | IDs:{','.join(map(str, ids_now)) if ids_now else 'none'} | "
-                    f"REC:{rec_text}"
+                    f"REC:{rec_text} | STATE:{'ARMED' if armed else 'DISARMED'}"
                 )
 
             last_ids = ids_now
